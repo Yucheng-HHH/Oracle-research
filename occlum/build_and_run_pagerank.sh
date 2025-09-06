@@ -9,6 +9,12 @@ NC='\033[0m'
 PROJECT_DIR="pagerank_project"
 JAR_NAME="pagerank.jar"
 
+# 支持的签名方案列表，默认全部运行
+# 可通过 SCHEMES 环境变量覆盖，如 SCHEMES="ecdsa-k1,ed25519"
+DEFAULT_SCHEMES="ecdsa-k1,ecdsa-r1,ed25519,schnorr-k1,bls12-381"
+SCHEMES=${SCHEMES:-$DEFAULT_SCHEMES}
+IFS=',' read -ra SCHEME_ARRAY <<< "$SCHEMES"
+
 # --- Set Environment Variables for Occlum Toolchain ---
 # This points to the specific library paths required by Occlum's toolchain.
 export JAVA_HOME=/opt/occlum/toolchains/jvm/java-11-alibaba-dragonwell
@@ -18,7 +24,8 @@ export LD_LIBRARY_PATH=/opt/occlum/toolchains/gcc/x86_64-linux-musl/lib
 echo -e "${BLUE}Step 1: Compiling Java source and creating executable JAR file...${NC}"
 # --- Clean and Compile ---
 rm -rf ${PROJECT_DIR}/classes && mkdir -p ${PROJECT_DIR}/classes
-occlum-javac -d ./${PROJECT_DIR}/classes ./${PROJECT_DIR}/src/com/mypagerank/*.java
+occlum-javac -cp ./${PROJECT_DIR}/lib/bcprov-jdk18on-1.79.jar -d ./${PROJECT_DIR}/classes ./${PROJECT_DIR}/src/com/mypagerank/*.java
+
 
 # --- Package into JAR ---
 jar cvfm ${JAR_NAME} ./${PROJECT_DIR}/manifest.txt -C ./${PROJECT_DIR}/classes .
@@ -56,31 +63,41 @@ echo -e "${BLUE}Step 4: Running PageRank application inside Occlum...${NC}"
 
 # Helper to run once and emit a CSV metrics line (without header)
 run_once() {
+  local scheme="$1"
   local out
-  out=$(occlum run /usr/lib/jvm/java-11-alibaba-dragonwell/jre/bin/java -Xmx512m -XX:MaxMetaspaceSize=64m -jar /app/${JAR_NAME})
+  
+  # 将签名方案和数据文件路径传给 Java 程序
+  # 使用固定的数据文件路径，该路径已在 pagerank.yaml 中配置
+    out=$(occlum run /usr/lib/jvm/java-11-alibaba-dragonwell/jre/bin/java -Xmx512m -XX:MaxMetaspaceSize=64m \
+       -cp "/app/bcprov-jdk18on-1.79.jar:/app/${JAR_NAME}" \
+       -Djava.security.properties=/dev/null \
+       -Djava.security.policy=/dev/null \
+       com.mypagerank.PageRank "$scheme" "/app/data/edges.csv")
   echo "$out"
 
-  # Optionally save artifacts for on-chain input (JSONL with delta/sigma)
+  # 保存工件到按方案命名的 JSONL 文件
   save_artifacts() {
     local text="$1"
+    local scheme="$2"
     local rs=$(echo "$text" | sed -n 's/^PageRank Result String:[[:space:]]*\(.*\)$/\1/p' | head -n1)
     local delta_payload=$(echo "$text" | sed -n 's/^Delta Payload:[[:space:]]*\(.*\)$/\1/p' | head -n1)
     local delta_sig=$(echo "$text" | sed -n 's/^Delta Signature (Base64):[[:space:]]*\(.*\)$/\1/p' | head -n1)
     local sigma_sig=$(echo "$text" | sed -n 's/^Sigma Signature (Base64):[[:space:]]*\(.*\)$/\1/p' | head -n1)
+    local sig_scheme=$(echo "$text" | sed -n 's/^Sig_Scheme:[[:space:]]*\(.*\)$/\1/p' | head -n1)
 
-    # Append machine-readable JSONL for chain input
-    local JSONL="../experiment_data.jsonl"
+    # 按方案命名 JSONL 文件
+    local JSONL="../experiment_data_${scheme}.jsonl"
     if [ -n "$rs" ] && [ -n "$delta_payload" ] && [ -n "$delta_sig" ] && [ -n "$sigma_sig" ]; then
-      printf '{"data":"%s","deltaPayload":"%s","deltaBase64Sig":"%s","sigmaBase64Sig":"%s"}\n' \
-        "$rs" "$delta_payload" "$delta_sig" "$sigma_sig" >> "$JSONL"
+      printf '{"scheme":"%s","data":"%s","deltaPayload":"%s","deltaBase64Sig":"%s","sigmaBase64Sig":"%s"}\n' \
+        "${sig_scheme:-$scheme}" "$rs" "$delta_payload" "$delta_sig" "$sigma_sig" >> "$JSONL"
       echo "Artifacts appended to $JSONL"
     else
-      echo "WARN: Missing one of required fields (data/delta/sigma); skipping JSONL append" >&2
+      echo "WARN: Missing one of required fields (data/delta/sigma); skipping JSONL append for $scheme" >&2
     fi
   }
 
   if [ "${SAVE_ARTIFACTS:-1}" -eq 1 ]; then
-    save_artifacts "$out"
+    save_artifacts "$out" "$scheme"
   fi
 
   # Extract metrics
@@ -90,6 +107,7 @@ run_once() {
   local ts_v=$(echo "$out" | grep -oE "TS_Verify_ms:[0-9]+" | cut -d: -f2)
   # Robust extraction (tolerate spaces): use sed anchored at line start
   # New metrics for chained scheme (base64 sizes only as required)
+  local pr_us=$(echo "$out" | sed -n 's/^PR_compute_us:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
   local delta_ms=$(echo "$out" | sed -n 's/^Delta_Sign_ms:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
   local dver_ms=$(echo "$out" | sed -n 's/^Delta_Verify_ms:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
   local sigma_ms=$(echo "$out" | sed -n 's/^Sigma_Sign_ms:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
@@ -101,68 +119,80 @@ run_once() {
   if [ -z "$sigma_b64" ]; then sigma_b64=$(echo "$out" | sed -n 's/^Sigma Signature (Base64):[[:space:]]*\(.*\)$/\1/p' | head -n1 | wc -c); fi
 
   # Emit one CSV record values (without count)
-  echo "$delta_ms,$dver_ms,$sigma_ms,$sver_ms,$delta_b64,$sigma_b64"
+  echo "$pr_us,$delta_ms,$dver_ms,$sigma_ms,$sver_ms,$delta_b64,$sigma_b64"
 }
 
-# Prepare CSV under project root
-CSV_PATH="../tee_benchmark_coarse.csv"
-if [ ! -f "$CSV_PATH" ]; then
-  echo "count,Delta_Sign_ms,Delta_Verify_ms,Sigma_Sign_ms,Sigma_Verify_ms,Delta_Sig_base64_bytes,Sigma_Sig_base64_bytes" > "$CSV_PATH"
-fi
+# 循环每个签名方案
+for SCHEME in "${SCHEME_ARRAY[@]}"; do
+  echo -e "${BLUE}Running with signature scheme: $SCHEME${NC}"
+  
+  # 为每个方案准备独立的 CSV 文件
+  CSV_PATH="../tee_benchmark_${SCHEME}.csv"
+  if [ ! -f "$CSV_PATH" ]; then
+    echo "count,PR_compute_us,Delta_Sign_ms,Delta_Verify_ms,Sigma_Sign_ms,Sigma_Verify_ms,Delta_Sig_base64_bytes,Sigma_Sig_base64_bytes" > "$CSV_PATH"
+  fi
 
-# Support RUNS (single value) or RUNS_LIST (comma list like 5,10,15,20,25)
-if [ -n "$RUNS_LIST" ]; then
-  IFS=',' read -ra RUN_LIST_ARR <<< "$RUNS_LIST"
-  for RUNS in "${RUN_LIST_ARR[@]}"; do
-    total_delta=0; total_dver=0; total_sigma=0; total_sver=0; last_delta_b64=0; last_sigma_b64=0
+  # Support RUNS (single value) or RUNS_LIST (comma list like 5,10,15,20,25)
+  if [ -n "$RUNS_LIST" ]; then
+    IFS=',' read -ra RUN_LIST_ARR <<< "$RUNS_LIST"
+    for RUNS in "${RUN_LIST_ARR[@]}"; do
+      total_prus=0; total_delta=0; total_dver=0; total_sigma=0; total_sver=0; last_delta_b64=0; last_sigma_b64=0
 
+      for i in $(seq 1 "$RUNS"); do
+        rec=$(run_once "$SCHEME" | tail -n1)
+        prus=$(echo "$rec" | cut -d, -f1)
+        delta=$(echo "$rec" | cut -d, -f2)
+        dver=$(echo "$rec" | cut -d, -f3)
+        sigma=$(echo "$rec" | cut -d, -f4)
+        sver=$(echo "$rec" | cut -d, -f5)
+        delta_b64=$(echo "$rec" | cut -d, -f6)
+        sigma_b64=$(echo "$rec" | cut -d, -f7)
+
+        total_prus=$(( total_prus + ${prus:-0} ))
+        total_delta=$(( total_delta + ${delta:-0} ))
+        total_dver=$(( total_dver + ${dver:-0} ))
+        total_sigma=$(( total_sigma + ${sigma:-0} ))
+        total_sver=$(( total_sver + ${sver:-0} ))
+        last_delta_b64=$delta_b64; last_sigma_b64=$sigma_b64
+      done
+
+      avg_prus=$(( total_prus / RUNS ))
+      avg_delta=$(( total_delta / RUNS ))
+      avg_dver=$(( total_dver / RUNS ))
+      avg_sigma=$(( total_sigma / RUNS ))
+      avg_sver=$(( total_sver / RUNS ))
+      echo "$RUNS,$avg_prus,$avg_delta,$avg_dver,$avg_sigma,$avg_sver,${last_delta_b64:-0},${last_sigma_b64:-0}" >> "$CSV_PATH"
+    done
+  else
+    # Single RUN (or default 1)
+    RUNS=${RUNS:-1}
+    total_prus=0; total_delta=0; total_dver=0; total_sigma=0; total_sver=0; last_delta_b64=0; last_sigma_b64=0
     for i in $(seq 1 "$RUNS"); do
-      rec=$(run_once | tail -n1)
-      delta=$(echo "$rec" | cut -d, -f1)
-      dver=$(echo "$rec" | cut -d, -f2)
-      sigma=$(echo "$rec" | cut -d, -f3)
-      sver=$(echo "$rec" | cut -d, -f4)
-      delta_b64=$(echo "$rec" | cut -d, -f5)
-      sigma_b64=$(echo "$rec" | cut -d, -f6)
+      rec=$(run_once "$SCHEME" | tail -n1)
+      prus=$(echo "$rec" | cut -d, -f1)
+      delta=$(echo "$rec" | cut -d, -f2)
+      dver=$(echo "$rec" | cut -d, -f3)
+      sigma=$(echo "$rec" | cut -d, -f4)
+      sver=$(echo "$rec" | cut -d, -f5)
+      delta_b64=$(echo "$rec" | cut -d, -f6)
+      sigma_b64=$(echo "$rec" | cut -d, -f7)
 
+      total_prus=$(( total_prus + ${prus:-0} ))
       total_delta=$(( total_delta + ${delta:-0} ))
       total_dver=$(( total_dver + ${dver:-0} ))
       total_sigma=$(( total_sigma + ${sigma:-0} ))
       total_sver=$(( total_sver + ${sver:-0} ))
       last_delta_b64=$delta_b64; last_sigma_b64=$sigma_b64
     done
-
+    avg_prus=$(( total_prus / RUNS ))
     avg_delta=$(( total_delta / RUNS ))
     avg_dver=$(( total_dver / RUNS ))
     avg_sigma=$(( total_sigma / RUNS ))
     avg_sver=$(( total_sver / RUNS ))
-    echo "$RUNS,$avg_delta,$avg_dver,$avg_sigma,$avg_sver,${last_delta_b64:-0},${last_sigma_b64:-0}" >> "$CSV_PATH"
-  done
-else
-  # Single RUN (or default 1)
-  RUNS=${RUNS:-1}
-  total_delta=0; total_dver=0; total_sigma=0; total_sver=0; last_delta_b64=0; last_sigma_b64=0
-  for i in $(seq 1 "$RUNS"); do
-    rec=$(run_once | tail -n1)
-    delta=$(echo "$rec" | cut -d, -f1)
-    dver=$(echo "$rec" | cut -d, -f2)
-    sigma=$(echo "$rec" | cut -d, -f3)
-    sver=$(echo "$rec" | cut -d, -f4)
-    delta_b64=$(echo "$rec" | cut -d, -f5)
-    sigma_b64=$(echo "$rec" | cut -d, -f6)
+    echo "$RUNS,$avg_prus,$avg_delta,$avg_dver,$avg_sigma,$avg_sver,${last_delta_b64:-0},${last_sigma_b64:-0}" >> "$CSV_PATH"
+  fi
 
-    total_delta=$(( total_delta + ${delta:-0} ))
-    total_dver=$(( total_dver + ${dver:-0} ))
-    total_sigma=$(( total_sigma + ${sigma:-0} ))
-    total_sver=$(( total_sver + ${sver:-0} ))
-    last_delta_b64=$delta_b64; last_sigma_b64=$sigma_b64
-  done
-  avg_delta=$(( total_delta / RUNS ))
-  avg_dver=$(( total_dver / RUNS ))
-  avg_sigma=$(( total_sigma / RUNS ))
-  avg_sver=$(( total_sver / RUNS ))
-  echo "$RUNS,$avg_delta,$avg_dver,$avg_sigma,$avg_sver,${last_delta_b64:-0},${last_sigma_b64:-0}" >> "$CSV_PATH"
-fi
+  echo "CSV written for $SCHEME: $CSV_PATH"
+done
 
-echo "CSV written: $CSV_PATH"
 echo -e "${BLUE}All steps completed successfully!${NC}"
