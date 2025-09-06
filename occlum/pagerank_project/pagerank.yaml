@@ -1,0 +1,9 @@
+includes:
+  - base.yaml
+  - java-11-alibaba-dragonwell.yaml
+targets:
+
+  - target: /app
+    copy:
+      - files:
+        - ../pagerank.jar
