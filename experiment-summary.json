@@ -1,0 +1,62 @@
+{
+  "experiment_info": {
+    "title": "Oracle Data Storage Performance Benchmark",
+    "date": "2024-01",
+    "network": "Sepolia Testnet",
+    "contract_address": "0xFa4b61E50A0d389FFd9e8d6Ab450E999b8385bc2",
+    "gas_price_range": "20-200 Gwei",
+    "block_gas_limit": 30000000
+  },
+  "write_operations": {
+    "32B": {"gas": 142542, "calldata_bytes": 132, "gas_per_byte": 4454.44},
+    "64B": {"gas": 165248, "calldata_bytes": 164, "gas_per_byte": 2582.00},
+    "128B": {"gas": 210648, "calldata_bytes": 228, "gas_per_byte": 1645.69},
+    "256B": {"gas": 301484, "calldata_bytes": 356, "gas_per_byte": 1177.67},
+    "512B": {"gas": 483120, "calldata_bytes": 612, "gas_per_byte": 943.59},
+    "1024B": {"gas": 846344, "calldata_bytes": 1124, "gas_per_byte": 826.51},
+    "2048B": {"gas": 1572984, "calldata_bytes": 2148, "gas_per_byte": 768.06}
+  },
+  "read_operations": {
+    "32B": {"gas": 32572, "calldata_bytes": 36, "response_bytes": 66, "gas_per_byte": 1017.88},
+    "64B": {"gas": 34807, "calldata_bytes": 36, "response_bytes": 130, "gas_per_byte": 543.86},
+    "128B": {"gas": 39278, "calldata_bytes": 36, "response_bytes": 258, "gas_per_byte": 306.86},
+    "256B": {"gas": 48221, "calldata_bytes": 36, "response_bytes": 514, "gas_per_byte": 188.36},
+    "512B": {"gas": 66516, "calldata_bytes": 36, "response_bytes": 1026, "gas_per_byte": 129.91},
+    "1024B": {"gas": 102373, "calldata_bytes": 36, "response_bytes": 2050, "gas_per_byte": 99.97},
+    "2048B": {"gas": 175346, "calldata_bytes": 36, "response_bytes": 4098, "gas_per_byte": 85.62}
+  },
+  "bulk_operations": {
+    "bulk_write": {
+      "5_items": {"total_gas": 941737, "calldata_bytes": 1252, "gas_per_item": 188347, "efficiency_vs_single": -10.6},
+      "10_items": {"total_gas": 1228906, "calldata_bytes": 2372, "gas_per_item": 122891, "efficiency_vs_single": 42.0},
+      "20_items": {"total_gas": 2428204, "calldata_bytes": 4612, "gas_per_item": 121410, "efficiency_vs_single": 42.8}
+    },
+    "bulk_read": {
+      "5_items": {"total_gas": 91504, "calldata_bytes": 228, "gas_per_item": 18301, "efficiency_vs_single": 53.4},
+      "10_items": {"total_gas": 157657, "calldata_bytes": 388, "gas_per_item": 15766, "efficiency_vs_single": 59.9},
+      "20_items": {"total_gas": 291745, "calldata_bytes": 708, "gas_per_item": 14587, "efficiency_vs_single": 62.9}
+    }
+  },
+  "performance_models": {
+    "write_formula": "Gas ≈ 120,000 + 768 × data_size_bytes",
+    "read_formula": "Gas ≈ 30,000 + 86 × data_size_bytes",
+    "write_base_cost": 120000,
+    "write_variable_cost_per_byte": 768,
+    "read_base_cost": 30000,
+    "read_variable_cost_per_byte": 86
+  },
+  "large_data_predictions": {
+    "100KB": {"write_gas": 76920000, "read_gas": 8630000, "blocks_needed": 3},
+    "1MB": {"write_gas": 805306368, "read_gas": 90177536, "blocks_needed": 27},
+    "5MB": {"write_gas": 4026531840, "read_gas": 450887680, "blocks_needed": 133},
+    "10MB": {"write_gas": 8053063680, "read_gas": 901775360, "blocks_needed": 267},
+    "20MB": {"write_gas": 16106127360, "read_gas": 1803550720, "blocks_needed": 533}
+  },
+  "key_findings": {
+    "feasibility": "Technically feasible for MB-scale data storage",
+    "cost_efficiency": "5-10x cheaper to read than write",
+    "bulk_advantage": "40-60% gas savings with bulk operations",
+    "scale_effects": "Per-byte cost decreases with data size",
+    "main_limitation": "Economic cost is primary constraint"
+  }
+}

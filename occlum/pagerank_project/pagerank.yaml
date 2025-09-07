@@ -7,3 +7,9 @@ targets:
     copy:
       - files:
         - ../pagerank.jar
+        - ../bcprov-jdk18on-1.79.jar  # 使用新版本
+  # 使用绝对路径指向数据文件
+  - target: /app/data
+    copy:
+      - files:
+        - ../pagerank_project/data/edges.csv

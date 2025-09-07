@@ -1,0 +1,27 @@
+{
+  "network": "sepolia",
+  "router": "0x3257d77Ca6E900aD00F6B2038D812eB879BbF621",
+  "verifiers": {
+    "ecdsa-k1": "0xf7ceB18A72875cd18ad6978d10f00A70dA5FE9Eb",
+    "ecdsa-r1": "0x62828D84Ac0f63D0d5999A7304e7113Db6E3f87F",
+    "schnorr-k1": "0xDF8701Dcc5e0D8BBCd31853ca19C2Bf68dD7bc2C",
+    "ed25519": "0x87f6ABc9b7bC46Ed51786f473B0A335457A87D1F"
+  },
+  "verifierHistory": {
+    "ecdsa-k1": [
+      "0x1Aa33DA1241250E47972C23700ad17a07Ec9Bc69",
+      "0xf7ceB18A72875cd18ad6978d10f00A70dA5FE9Eb"
+    ]
+  },
+  "history": {
+    "schnorr-k1": [
+      "0x1dD6a5629BA3efA2FfFf67919DDCfd3F1456dF72",
+      "0xDF8701Dcc5e0D8BBCd31853ca19C2Bf68dD7bc2C"
+    ],
+    "ed25519": [
+      "0x7Eca2C800DAe95e2A90577A2dc9Ee51F951fBf1F",
+      "0x3D85931a8D719b7A031BEF9Aa98E772F4A33747a",
+      "0x87f6ABc9b7bC46Ed51786f473B0A335457A87D1F"
+    ]
+  }
+}

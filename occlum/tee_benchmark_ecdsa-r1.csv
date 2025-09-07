@@ -1,0 +1,6 @@
+count,PR_compute_us,Delta_Sign_ms,Delta_Verify_ms,Sigma_Sign_ms,Sigma_Verify_ms,Delta_Sig_base64_bytes,Sigma_Sig_base64_bytes
+1,544,11,2,2,1,96,96
+5,625,12,1,2,1,96,96
+10,505,11,1,2,1,96,96
+15,458,12,1,2,1,96,96
+20,570,10,1,2,1,96,96

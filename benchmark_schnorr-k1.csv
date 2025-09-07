@@ -1,0 +1,6 @@
+count,scheme,avg_gas,calldata_bytes
+1,schnorr-k1,200600,1028
+5,schnorr-k1,200600,1028
+10,schnorr-k1,200600,1028
+15,schnorr-k1,200600,1028
+20,schnorr-k1,200600,1028

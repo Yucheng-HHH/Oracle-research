@@ -1,72 +1,52 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "./libs/Crypto.sol";
+import "./interfaces/IVerifier.sol";
 
 contract UniversalOracleVerifier {
-
-    // Define a struct to hold signature data, preventing "stack too deep" errors.
     struct SignatureData {
         string data;
         bytes signature;
         bytes publicKey;
     }
 
-    function verifyEcdsa(bytes32 digest, bytes memory signature, bytes memory publicKey) 
-        internal pure returns (bool) 
-    {
-        if (publicKey.length != 64 || signature.length != 64) return false;
-        
-        bytes32 r;
-        bytes32 s;
-        assembly {
-            r := mload(add(signature, 0x20))
-            s := mload(add(signature, 0x40))
-        }
-        
-        bytes32 pubKeyX;
-        bytes32 pubKeyY;
-        assembly {
-            pubKeyX := mload(add(publicKey, 0x20))
-            pubKeyY := mload(add(publicKey, 0x40))
-        }
+    address public owner;
+    mapping(bytes32 => IVerifier) private schemeToVerifier;
 
-        return Crypto.verifyEcdsa(digest, r, s, pubKeyX, pubKeyY);
+    modifier onlyOwner() {
+        require(msg.sender == owner, "not owner");
+        _;
     }
 
-    function verifySchnorr(bytes32 digest, bytes memory signature, bytes memory publicKey) 
-        internal pure returns (bool) 
-    {
-        return verifyEcdsa(digest, signature, publicKey);
+    constructor() {
+        owner = msg.sender;
     }
 
-    // --- Unified Verification Function ---
-    // THIS IS A KEY CHANGE: Changed from 'pure' to 'view'
+    function registerVerifier(string memory scheme, address verifier) external onlyOwner {
+        require(verifier != address(0), "invalid verifier");
+        schemeToVerifier[keccak256(bytes(scheme))] = IVerifier(verifier);
+    }
+
+    function unregisterVerifier(string memory scheme) external onlyOwner {
+        delete schemeToVerifier[keccak256(bytes(scheme))];
+    }
+
+    function getVerifier(string memory scheme) public view returns (IVerifier verifier) {
+        verifier = schemeToVerifier[keccak256(bytes(scheme))];
+        require(address(verifier) != address(0), "verifier not set");
+    }
+
+    // digest is sha256(bytes(data)) computed by router for consistency
     function verify(
         string memory scheme,
         bytes32 digest,
         bytes memory signature,
         bytes memory publicKey
     ) public view returns (bool) {
-        bytes32 schemeHash = keccak256(bytes(scheme));
-        if (schemeHash == keccak256(bytes("ecdsa-k1"))) {
-            return verifyEcdsa(digest, signature, publicKey);
-        }
-        if (schemeHash == keccak256(bytes("ecdsa-r1"))) {
-            return verifyEcdsa(digest, signature, publicKey);
-        }
-        if (schemeHash == keccak256(bytes("ed25519"))) {
-            // This now correctly calls a 'view' function from the Crypto library
-            return Crypto.verifyEd25519(digest, signature, publicKey);
-        }
-        if (schemeHash == keccak256(bytes("schnorr-k1"))) {
-            return verifySchnorr(digest, signature, publicKey);
-        }
-        return false;
+        IVerifier v = getVerifier(scheme);
+        return v.verify(digest, signature, publicKey);
     }
 
-    // --- Two-Signature Verification ---
-    // THIS IS A KEY CHANGE: Changed from 'pure' to 'view'
     function verifyTwoSignatures(
         string memory scheme,
         SignatureData calldata sigDataA,
@@ -74,10 +54,9 @@ contract UniversalOracleVerifier {
     ) public view returns (bool) {
         bytes32 digestA = sha256(bytes(sigDataA.data));
         bytes32 digestB = sha256(bytes(sigDataB.data));
-
-        bool okA = verify(scheme, digestA, sigDataA.signature, sigDataA.publicKey);
-        bool okB = verify(scheme, digestB, sigDataB.signature, sigDataB.publicKey);
-
+        IVerifier v = getVerifier(scheme);
+        bool okA = v.verify(digestA, sigDataA.signature, sigDataA.publicKey);
+        bool okB = v.verify(digestB, sigDataB.signature, sigDataB.publicKey);
         return okA && okB;
     }
 }
