@@ -1,0 +1,14 @@
+--- Public Key Generation ---
+Scheme: ecdsa-k1
+  Public Key (Base64): MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAECyQCpl5fZaJ7IxENk6PLd55DqfQIJ4PAvIzxXKmveCF4UyFICXlgR1aHS37mSQ4fjjSp8MBHENkrb5Meiajk0w==
+
+Scheme: ecdsa-r1
+  Public Key (Base64): MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4lOGvkWZ/UsC4Tk/eLxAtbpGdNQOqo3zF0ZBFwtxDmCoQzaLDVFavsBOYVA90yK5CB6TQ/dfH2Ul5hHEpvcz4w==
+
+Scheme: ed25519
+  Public Key (Base64): MCowBQYDK2VwAyEA6HyutpqhpDgIbfnO72zyHuOCpA7aDciIP2/8TpGztHY=
+
+Scheme: schnorr-k1
+  Public Key (Base64): MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAE1x9z24iqWpJQsG6QMUDXoK3Z6EvFlzTehRYw3SvE7ApWNKM+LAtiDJzM7BjZpDRsMxFt862/JKklPivV75wp0w==
+
+---------------------------

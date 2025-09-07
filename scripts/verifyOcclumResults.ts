@@ -1,28 +1,66 @@
 import { ethers } from "hardhat";
-import { parseRunsPreferred, base64DerToRSVAndAddressSha256 } from "./utils/signatureUtils";
+import { parseRunsPreferred, getSignatureRS } from "./utils/signatureUtils";
 
 const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS || "";
 
 async function main() {
-  if (!CONTRACT_ADDRESS) throw new Error("Set CONTRACT_ADDRESS");
+  if (!CONTRACT_ADDRESS) throw new Error("Set CONTRACT_ADDRESS in your environment");
 
-  // Use the latest run from experiment_data.txt (TEE + TS)
   const runs = parseRunsPreferred();
-  if (runs.length === 0) throw new Error("No runs parsed from occlum/experiment_data.txt");
-  const r = runs[runs.length - 1];
-  const tee = base64DerToRSVAndAddressSha256(r.deltaBase64Sig, r.data);
-  const ts  = base64DerToRSVAndAddressSha256(r.sigmaBase64Sig, r.deltaPayload);
+  if (runs.length === 0) throw new Error("No runs found in occlum/experiment_data.jsonl");
+  const lastRun = runs[runs.length - 1];
 
-  console.log("Recovered TEE:", tee.addr);
-  console.log("Recovered TS:", ts.addr);
+  console.log(`Verifying last run with scheme: ${lastRun.scheme}`);
+  
+  const verifier = await ethers.getContractAt("UniversalOracleVerifier", CONTRACT_ADDRESS);
 
-  const verifier = await ethers.getContractAt("OracleVerifier", CONTRACT_ADDRESS);
-  // Prefer SHA256 path if your TEE used SHA256 without eth-prefix
-  const ok = await (verifier as any).verifyTwoSignaturesSha256(
-    r.data, ethers.getBytes(tee.rsv), tee.addr,
-    r.deltaPayload, ethers.getBytes(ts.rsv), ts.addr
+  // Helper function to prepare data for the contract
+  const prepareSignatureData = (scheme: string, base64Sig: string, base64PubKey: string) => {
+    let signatureBytes: Buffer;
+    if (scheme === 'ed25519') {
+      signatureBytes = Buffer.from(base64Sig, "base64");
+    } else {
+      const sig = getSignatureRS(base64Sig);
+      signatureBytes = Buffer.concat([Buffer.from(sig.r.slice(2), 'hex'), Buffer.from(sig.s.slice(2), 'hex')]);
+    }
+
+    const prefixLength = scheme === 'ed25519' ? 12 : 27;
+    const publicKeyBytes = Buffer.from(base64PubKey, 'base64').slice(prefixLength);
+
+    return { signature: signatureBytes, publicKey: publicKeyBytes };
+  };
+
+  const tee = prepareSignatureData(lastRun.scheme, lastRun.deltaBase64Sig, lastRun.deltaPublicKeyBase64);
+  const ts = prepareSignatureData(lastRun.scheme, lastRun.sigmaBase64Sig, lastRun.sigmaPublicKeyBase64);
+  
+  // Create struct objects for the contract call
+  const sigDataA = {
+    data: lastRun.data,
+    signature: tee.signature,
+    publicKey: tee.publicKey
+  };
+
+  const sigDataB = {
+    data: lastRun.deltaPayload,
+    signature: ts.signature,
+    publicKey: ts.publicKey
+  };
+
+  // Call the refactored verification function
+  const isValid = await verifier.verifyTwoSignatures(
+    lastRun.scheme,
+    sigDataA,
+    sigDataB
   );
-  console.log("verifyTwoSignaturesSha256:", ok);
+
+  console.log(`Verification successful: ${isValid}`);
+  if (!isValid) {
+      console.error("Verification failed!");
+      process.exit(1);
+  }
 }
 
-main().catch((e)=>{ console.error(e); process.exitCode=1; });
+main().catch((e) => {
+  console.error(e);
+  process.exitCode = 1;
+});
