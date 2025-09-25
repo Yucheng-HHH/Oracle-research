@@ -106,30 +106,30 @@ run_once() {
   local ts_s=$(echo "$out" | grep -oE "TS_Sign_ms:[0-9]+" | cut -d: -f2)
   local ts_v=$(echo "$out" | grep -oE "TS_Verify_ms:[0-9]+" | cut -d: -f2)
   # Robust extraction (tolerate spaces): use sed anchored at line start
-  # New metrics for chained scheme (base64 sizes only as required)
+  # New metrics for chained scheme (base64 sizes only as required) - all times now in microseconds
   local pr_us=$(echo "$out" | sed -n 's/^PR_compute_us:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
-  local delta_ms=$(echo "$out" | sed -n 's/^Delta_Sign_ms:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
-  local dver_ms=$(echo "$out" | sed -n 's/^Delta_Verify_ms:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
-  local sigma_ms=$(echo "$out" | sed -n 's/^Sigma_Sign_ms:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
-  local sver_ms=$(echo "$out" | sed -n 's/^Sigma_Verify_ms:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
+  local delta_us=$(echo "$out" | sed -n 's/^Delta_Sign_us:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
+  local dver_us=$(echo "$out" | sed -n 's/^Delta_Verify_us:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
+  local sigma_us=$(echo "$out" | sed -n 's/^Sigma_Sign_us:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
+  local sver_us=$(echo "$out" | sed -n 's/^Sigma_Verify_us:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
   local delta_b64=$(echo "$out" | sed -n 's/^Delta_Sig_base64_bytes:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
   local sigma_b64=$(echo "$out" | sed -n 's/^Sigma_Sig_base64_bytes:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' | head -n1)
   # robust fallback: compute from inline base64 lines
   if [ -z "$delta_b64" ]; then delta_b64=$(echo "$out" | sed -n 's/^Delta Signature (Base64):[[:space:]]*\(.*\)$/\1/p' | head -n1 | wc -c); fi
   if [ -z "$sigma_b64" ]; then sigma_b64=$(echo "$out" | sed -n 's/^Sigma Signature (Base64):[[:space:]]*\(.*\)$/\1/p' | head -n1 | wc -c); fi
 
-  # Emit one CSV record values (without count)
-  echo "$pr_us,$delta_ms,$dver_ms,$sigma_ms,$sver_ms,$delta_b64,$sigma_b64"
+  # Emit one CSV record values (without count) - all times now in microseconds
+  echo "$pr_us,$delta_us,$dver_us,$sigma_us,$sver_us,$delta_b64,$sigma_b64"
 }
 
 # 循环每个签名方案
 for SCHEME in "${SCHEME_ARRAY[@]}"; do
   echo -e "${BLUE}Running with signature scheme: $SCHEME${NC}"
   
-  # 为每个方案准备独立的 CSV 文件
+  # 为每个方案准备独立的 CSV 文件（统一使用微秒单位）
   CSV_PATH="../tee_benchmark_${SCHEME}.csv"
   if [ ! -f "$CSV_PATH" ]; then
-    echo "count,PR_compute_us,Delta_Sign_ms,Delta_Verify_ms,Sigma_Sign_ms,Sigma_Verify_ms,Delta_Sig_base64_bytes,Sigma_Sig_base64_bytes" > "$CSV_PATH"
+    echo "count,PR_compute_us,Delta_Sign_us,Delta_Verify_us,Sigma_Sign_us,Sigma_Verify_us,Delta_Sig_base64_bytes,Sigma_Sig_base64_bytes" > "$CSV_PATH"
   fi
 
   # Support RUNS (single value) or RUNS_LIST (comma list like 5,10,15,20,25)
@@ -141,27 +141,27 @@ for SCHEME in "${SCHEME_ARRAY[@]}"; do
       for i in $(seq 1 "$RUNS"); do
         rec=$(run_once "$SCHEME" | tail -n1)
         prus=$(echo "$rec" | cut -d, -f1)
-        delta=$(echo "$rec" | cut -d, -f2)
-        dver=$(echo "$rec" | cut -d, -f3)
-        sigma=$(echo "$rec" | cut -d, -f4)
-        sver=$(echo "$rec" | cut -d, -f5)
+        delta_us=$(echo "$rec" | cut -d, -f2)
+        dver_us=$(echo "$rec" | cut -d, -f3)
+        sigma_us=$(echo "$rec" | cut -d, -f4)
+        sver_us=$(echo "$rec" | cut -d, -f5)
         delta_b64=$(echo "$rec" | cut -d, -f6)
         sigma_b64=$(echo "$rec" | cut -d, -f7)
 
         total_prus=$(( total_prus + ${prus:-0} ))
-        total_delta=$(( total_delta + ${delta:-0} ))
-        total_dver=$(( total_dver + ${dver:-0} ))
-        total_sigma=$(( total_sigma + ${sigma:-0} ))
-        total_sver=$(( total_sver + ${sver:-0} ))
+        total_delta=$(( total_delta + ${delta_us:-0} ))
+        total_dver=$(( total_dver + ${dver_us:-0} ))
+        total_sigma=$(( total_sigma + ${sigma_us:-0} ))
+        total_sver=$(( total_sver + ${sver_us:-0} ))
         last_delta_b64=$delta_b64; last_sigma_b64=$sigma_b64
       done
 
       avg_prus=$(( total_prus / RUNS ))
-      avg_delta=$(( total_delta / RUNS ))
-      avg_dver=$(( total_dver / RUNS ))
-      avg_sigma=$(( total_sigma / RUNS ))
-      avg_sver=$(( total_sver / RUNS ))
-      echo "$RUNS,$avg_prus,$avg_delta,$avg_dver,$avg_sigma,$avg_sver,${last_delta_b64:-0},${last_sigma_b64:-0}" >> "$CSV_PATH"
+      avg_delta_us=$(( total_delta / RUNS ))
+      avg_dver_us=$(( total_dver / RUNS ))
+      avg_sigma_us=$(( total_sigma / RUNS ))
+      avg_sver_us=$(( total_sver / RUNS ))
+      echo "$RUNS,$avg_prus,$avg_delta_us,$avg_dver_us,$avg_sigma_us,$avg_sver_us,${last_delta_b64:-0},${last_sigma_b64:-0}" >> "$CSV_PATH"
     done
   else
     # Single RUN (or default 1)
@@ -170,26 +170,26 @@ for SCHEME in "${SCHEME_ARRAY[@]}"; do
     for i in $(seq 1 "$RUNS"); do
       rec=$(run_once "$SCHEME" | tail -n1)
       prus=$(echo "$rec" | cut -d, -f1)
-      delta=$(echo "$rec" | cut -d, -f2)
-      dver=$(echo "$rec" | cut -d, -f3)
-      sigma=$(echo "$rec" | cut -d, -f4)
-      sver=$(echo "$rec" | cut -d, -f5)
+      delta_us=$(echo "$rec" | cut -d, -f2)
+      dver_us=$(echo "$rec" | cut -d, -f3)
+      sigma_us=$(echo "$rec" | cut -d, -f4)
+      sver_us=$(echo "$rec" | cut -d, -f5)
       delta_b64=$(echo "$rec" | cut -d, -f6)
       sigma_b64=$(echo "$rec" | cut -d, -f7)
 
       total_prus=$(( total_prus + ${prus:-0} ))
-      total_delta=$(( total_delta + ${delta:-0} ))
-      total_dver=$(( total_dver + ${dver:-0} ))
-      total_sigma=$(( total_sigma + ${sigma:-0} ))
-      total_sver=$(( total_sver + ${sver:-0} ))
+      total_delta=$(( total_delta + ${delta_us:-0} ))
+      total_dver=$(( total_dver + ${dver_us:-0} ))
+      total_sigma=$(( total_sigma + ${sigma_us:-0} ))
+      total_sver=$(( total_sver + ${sver_us:-0} ))
       last_delta_b64=$delta_b64; last_sigma_b64=$sigma_b64
     done
     avg_prus=$(( total_prus / RUNS ))
-    avg_delta=$(( total_delta / RUNS ))
-    avg_dver=$(( total_dver / RUNS ))
-    avg_sigma=$(( total_sigma / RUNS ))
-    avg_sver=$(( total_sver / RUNS ))
-    echo "$RUNS,$avg_prus,$avg_delta,$avg_dver,$avg_sigma,$avg_sver,${last_delta_b64:-0},${last_sigma_b64:-0}" >> "$CSV_PATH"
+    avg_delta_us=$(( total_delta / RUNS ))
+    avg_dver_us=$(( total_dver / RUNS ))
+    avg_sigma_us=$(( total_sigma / RUNS ))
+    avg_sver_us=$(( total_sver / RUNS ))
+    echo "$RUNS,$avg_prus,$avg_delta_us,$avg_dver_us,$avg_sigma_us,$avg_sver_us,${last_delta_b64:-0},${last_sigma_b64:-0}" >> "$CSV_PATH"
   fi
 
   echo "CSV written for $SCHEME: $CSV_PATH"

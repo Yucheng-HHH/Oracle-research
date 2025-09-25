@@ -1,6 +1,0 @@
-count,Delta_Sign_ms,Delta_Verify_ms,Sigma_Sign_ms,Sigma_Verify_ms,Delta_Sig_base64_bytes,Sigma_Sig_base64_bytes
-5,6,2,1,2,96,96
-10,6,1,1,1,96,96
-15,6,1,1,2,96,96
-20,6,1,1,1,96,96
-25,7,2,1,1,96,96

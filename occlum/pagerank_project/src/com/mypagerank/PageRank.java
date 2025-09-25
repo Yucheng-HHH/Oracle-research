@@ -137,14 +137,14 @@ public class PageRank {
 
         // 4) 链式方案：Delta = TEE 对 result 签名；Sigma = TS 对 Delta Payload 签名
         byte[] deltaSigDer;        // TEE 自签（对 resultString）
-        long deltaSignMs;          // TEE 生成 delta 签名时间
+        long deltaSignUs;          // TEE 生成 delta 签名时间（微秒）
 
-        long deltaVerifyMs;        // TS 验证 delta（TEE 的签名）耗时
+        long deltaVerifyUs;        // TS 验证 delta（TEE 的签名）耗时（微秒）
         String deltaPayloadStr = ""; // TS 对其进行签名的载荷（包含 result 摘要等）
 
         byte[] sigmaSigDer;        // TS 对 deltaPayload 的签名
-        long sigmaSignMs;          // TS 生成 sigma 时间
-        long sigmaVerifyMs;        // TEE 验证 sigma 时间
+        long sigmaSignUs;          // TS 生成 sigma 时间（微秒）
+        long sigmaVerifyUs;        // TEE 验证 sigma 时间（微秒）
         try {
             String usedScheme = scheme;
             KeyPair kp = genKeyPair(usedScheme);
@@ -156,7 +156,7 @@ public class PageRank {
             sig.update(dataBytes);
             deltaSigDer = sig.sign();
             long s1 = System.nanoTime();
-            deltaSignMs = (s1 - s0) / 1_000_000;
+            deltaSignUs = (s1 - s0) / 1_000;
 
             // TS 验证 delta（TEE 对 result 的签名）
             long v0 = System.nanoTime();
@@ -165,7 +165,7 @@ public class PageRank {
             tsVerifyDelta.update(dataBytes);
             boolean deltaOk = tsVerifyDelta.verify(deltaSigDer);
             long v1 = System.nanoTime();
-            deltaVerifyMs = (v1 - v0) / 1_000_000;
+            deltaVerifyUs = (v1 - v0) / 1_000;
             if (!deltaOk) {
                 LOGGER.warning("TS failed to verify delta signature");
                 System.out.println("WARN: TS failed to verify delta signature");
@@ -184,7 +184,7 @@ public class PageRank {
             tsSig.update(deltaPayloadBytes);
             sigmaSigDer = tsSig.sign();
             long tsS1 = System.nanoTime();
-            sigmaSignMs = (tsS1 - tsS0) / 1_000_000;
+            sigmaSignUs = (tsS1 - tsS0) / 1_000;
 
             // TEE 验证 Sigma
             long sv0 = System.nanoTime();
@@ -193,7 +193,7 @@ public class PageRank {
             teeVerifySigma.update(deltaPayloadBytes);
             boolean sigmaOk = teeVerifySigma.verify(sigmaSigDer);
             long sv1 = System.nanoTime();
-            sigmaVerifyMs = (sv1 - sv0) / 1_000_000;
+            sigmaVerifyUs = (sv1 - sv0) / 1_000;
             if (!sigmaOk) {
                 LOGGER.warning("TEE failed to verify sigma signature");
                 System.out.println("WARN: TEE failed to verify sigma signature");
@@ -206,11 +206,11 @@ public class PageRank {
             e.printStackTrace(); // 打印完整的堆栈跟踪
 
             deltaSigDer = new byte[0];
-            deltaSignMs = 0L;
-            deltaVerifyMs = 0L;
+            deltaSignUs = 0L;
+            deltaVerifyUs = 0L;
             sigmaSigDer = new byte[0];
-            sigmaSignMs = 0L;
-            sigmaVerifyMs = 0L;
+            sigmaSignUs = 0L;
+            sigmaVerifyUs = 0L;
             System.out.println("WARN: signature not generated due to: " + e.getMessage());
         }
 
@@ -224,10 +224,10 @@ public class PageRank {
         System.out.println("Sigma Signature (Base64): " + sigmaBase64Sig);
         System.out.println("PR_compute_us:" + prUs);
         System.out.println("PR_per_iter_us:" + (prNs / Math.max(1, iterations)) / 1_000);
-        System.out.println("Delta_Sign_ms:" + deltaSignMs);
-        System.out.println("Delta_Verify_ms:" + deltaVerifyMs);
-        System.out.println("Sigma_Sign_ms:" + sigmaSignMs);
-        System.out.println("Sigma_Verify_ms:" + sigmaVerifyMs);
+        System.out.println("Delta_Sign_us:" + deltaSignUs);
+        System.out.println("Delta_Verify_us:" + deltaVerifyUs);
+        System.out.println("Sigma_Sign_us:" + sigmaSignUs);
+        System.out.println("Sigma_Verify_us:" + sigmaVerifyUs);
         System.out.println("Delta_Sig_base64_bytes:" + deltaBase64Sig.length());
         System.out.println("Sigma_Sig_base64_bytes:" + sigmaBase64Sig.length());
 
